@@ -1,0 +1,45 @@
+.expenses_container{
+display: flex;
+align-items: center;
+justify-content: center;
+flex-direction: column;
+margin-bottom: 2em;
+}
+
+.expenses_container > h1{
+    font-size: 1.8em;
+    font-weight:800;
+    
+    color: rgb(54, 209, 209);
+}
+.expenses_container > h2{
+    margin-top: 1.9em;
+    font-size: 1.5em;
+    font-weight:700;
+  
+}
+.expenses_container > h3{
+    margin-top: 2em;
+    margin-bottom: 0.6em;
+    font-size: 1em;
+    font-weight:700;
+  
+}
+ .first_table{
+    width: 70vmax;
+    /* border: 1px solid red; */
+ }
+ table{
+    width: 100%;
+ }
+tr:nth-child(even) {
+    background-color: #dddddd;
+  }
+  th{
+    background: rgb(54, 209, 209);
+  }
+  table, th, tr,.td {
+    border: 1px solid black;
+    border-collapse: collapse;
+  }
+  
