@@ -1,27 +1,50 @@
-const Sequelize=require('sequelize');
+const mongoose = require('mongoose');
 
-const sequelize=require('../util/database');
-
-
-const Expence=sequelize.define('Expence',{
-  id:{
-    type:Sequelize.INTEGER,
-    autoIncrement:true,
-    allowNull:false,
-    primaryKey:true
+const expenceSchema = new mongoose.Schema({
+  expenceAmount: {
+    type: Number,
+    required: true,
   },
-  expenceAmount:{
-    type:Sequelize.INTEGER,
-    allowNull:false
+  expenceDescription: {
+    type: String,
+    required: true,
   },
-  expenceDescription:{
-    type:Sequelize.STRING,
-    allowNull:false
+  expenceCategory: {
+    type: String,
+    required: true,
   },
-  expenceCategory:{
-    type:Sequelize.STRING,
-    allowNull:false
-  }
-});
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },  // Each Expence belongs to one User
+}, { timestamps: true });
 
-module.exports=Expence;
+module.exports = mongoose.model('Expence', expenceSchema);
+
+
+
+
+// const Sequelize=require('sequelize');
+
+// const sequelize=require('../util/database');
+
+
+// const Expence=sequelize.define('Expence',{
+//   id:{
+//     type:Sequelize.INTEGER,
+//     autoIncrement:true,
+//     allowNull:false,
+//     primaryKey:true
+//   },
+//   expenceAmount:{
+//     type:Sequelize.INTEGER,
+//     allowNull:false
+//   },
+//   expenceDescription:{
+//     type:Sequelize.STRING,
+//     allowNull:false
+//   },
+//   expenceCategory:{
+//     type:Sequelize.STRING,
+//     allowNull:false
+//   }
+// });
+
+// module.exports=Expence;

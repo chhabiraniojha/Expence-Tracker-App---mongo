@@ -1,106 +1,83 @@
-const Expence = require('../models/Expence')
-const User = require('../models/User')
-const ExpenceReport=require('../models/ExpenceReport')
-const sequelize = require('../util/database')
-const AWS = require('aws-sdk')
+const Expence = require('../models/Expence');
+const User = require('../models/User');
+const ExpenceReport = require('../models/ExpenceReport');
+const AWS = require('aws-sdk');
 
+// Add expense
 exports.addExpence = async (req, res, next) => {
   const { expenceAmount, expenceDescription, expenceCategory } = req.body;
   const userId = req.user.id;
-  const t = await sequelize.transaction();
-  const prevExpence = Number(req.user.totalExpence)
+  const prevExpence = Number(req.user.totalExpence);
   const newExpence = prevExpence + Number(expenceAmount);
 
   try {
-    await Expence.create({ expenceAmount, expenceDescription, expenceCategory, userId }, { transaction: t })
-    await User.update({ totalExpence: newExpence }, {
-      where: {
-        id: userId
-      },
-      transaction: t
+    // Create expense
+    const expense = await Expence.create({ expenceAmount, expenceDescription, expenceCategory, userId });
 
-    });
-    await t.commit();
-    res.status(200).json("expence added")
+    // Update total expense for the user
+    await User.updateOne({ _id: userId }, { totalExpence: newExpence });
+
+    res.status(200).json("Expense added");
   } catch (error) {
-    await t.rollback();
-    res.json(error)
+    res.json(error);
   }
-
 }
 
+// Get all expenses
 exports.getExpence = async (req, res, next) => {
-
   try {
-    const expences = await Expence.findAll({
-      where: {
-        userId: req.user.id
-      }
-    })
-    return res.json(expences)
+    const expenses = await Expence.find({ userId: req.user.id });
+    return res.json(expenses);
   } catch (error) {
-    return res.json(error)
+    return res.json(error);
   }
 }
 
+// Delete expense
 exports.deleteExpence = async (req, res, next) => {
   const expenceId = req.params.id;
   const userId = req.user.id;
-  const t = await sequelize.transaction();
+  console.log(expenceId,userId)
+  
   try {
-    const expence = await Expence.findByPk(expenceId, {
-      attributes: ['expenceAmount']
-    })
-    const expenceAmount = Number(expence.expenceAmount)
-    const user = await User.findByPk(userId, {
-      attributes: ['totalExpence']
-    })
-    const totalExpence = Number(user.totalExpence);
-    const newTotalExpence = totalExpence - expenceAmount;
-    console.log(newTotalExpence)
+    // Get expense and user details
+    const expense = await Expence.findById(expenceId, 'expenceAmount');
+    const expenceAmount = expense.expenceAmount;
+    const user = await User.findById(userId, 'totalExpence');
+    const totalExpence = user.totalExpence;
+    const newTotalExpence = parseInt(totalExpence - expenceAmount);
+    console.log(typeof(newTotalExpence))
 
-    await Expence.destroy({
-      where: {
-        id: expenceId
-      },
-      transaction: t
-    });
-    await User.update({ totalExpence: newTotalExpence }, {
-      where: {
-        id: userId
-      },
-      transaction: t
+    // Delete expense and update user
+    await Expence.deleteOne({ _id: expenceId });
+    await User.updateOne({ _id: userId }, { totalExpence: newTotalExpence });
 
-    });
-    await t.commit()
-    res.status(200).json(`id ${expenceId} successfully deleted`)
+    res.status(200).json(`Expense ID ${expenceId} successfully deleted`);
   } catch (error) {
-    await t.rollback()
-    console.log(error)
+    console.log(error);
+    res.json(error);
   }
 }
 
+// Get paginated expenses
 exports.getPaginatedExpence = async (req, res, next) => {
   const id = req.user.id;
   const page = req.query.page;
   const pageLimit = parseInt(req.query.limit);
-  const count = await Expence.count({
-    where: {
-      userId: id
-    }
-  });
-  const expence = await Expence.findAll({
-    where: {
-      userId: id
-    },
-    offset: (page) * pageLimit,
-    limit: pageLimit
 
-  })
-  res.json({ expence, count })
+  try {
+    const count = await Expence.countDocuments({ userId: id });
+    const expenses = await Expence.find({ userId: id })
+      .skip(page * pageLimit)
+      .limit(pageLimit);
+
+    res.json({ expenses, count });
+  } catch (error) {
+    res.json(error);
+  }
 }
 
-
+// Upload expenses to S3
 const uploadToS3 = (data, fileName) => {
   const BUCKET_NAME = process.env.BUCKET_NAME;
   const IAM_USER_KEY = process.env.IAM_USER_KEY;
@@ -111,57 +88,49 @@ const uploadToS3 = (data, fileName) => {
     secretAccessKey: IAM_USER_SECRET_KEY,
   });
   const params = {
-		Bucket: BUCKET_NAME,
-		Key: fileName,
-		Body: data
-	};
+    Bucket: BUCKET_NAME,
+    Key: fileName,
+    Body: data
+  };
   return new Promise((resolve, reject) => {
-		s3.upload(params, (err, data) => {
-			if (err) {
-				reject(err);
-			} else {
-				resolve(data);
-			}
-		});
-	});
-
-
+    s3.upload(params, (err, data) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(data);
+      }
+    });
+  });
 }
+
+// Download all expenses and upload to S3
 exports.downloadExpences = async (req, res, next) => {
   try {
-    const expences = await Expence.findAll({
-      where: {
-        userId: req.user.id
-      }
-    })
-    const stringifiedExpences = JSON.stringify(expences)
+    const expenses = await Expence.find({ userId: req.user.id });
+    const stringifiedExpenses = JSON.stringify(expenses);
     const fileName = `Expenses_${req.user.id}_${new Date().getTime()}`;
-    const fileUrl = await uploadToS3(stringifiedExpences, fileName);
+    const fileUrl = await uploadToS3(stringifiedExpenses, fileName);
+
+    // Create an expense report in the database
     await ExpenceReport.create({
-			expenceUrl: fileUrl.Location,
-			userId: req.user.id,
-		});
+      expenceUrl: fileUrl.Location,
+      userId: req.user.id,
+    });
 
     res.status(200).json({ fileUrl, success: true });
-
   } catch (error) {
-    console.log(error)
+    console.log(error);
     res.status(500).json({ success: false });
-
   }
-  
 }
 
-
+// Show all reports
 exports.showReports = async (req, res) => {
-	try {
-		const reports = await ExpenceReport.findAll({
-      where:{
-          userId:req.user.id
-    }});
-		res.status(200).json({ success: true, message: "Successfully retrieved files", response: reports });
-	} catch (error) {
-		console.error(error);
-		res.status(500).json({ success: false });
-	}
+  try {
+    const reports = await ExpenceReport.find({ userId: req.user.id });
+    res.status(200).json({ success: true, message: "Successfully retrieved files", response: reports });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false });
+  }
 };
